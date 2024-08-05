@@ -1,23 +1,42 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { doc, getDoc } from 'firebase/firestore';
-import { db } from './firebase';
+import { db, auth } from './firebase';
 
 const ExpenseDetailScreen = ({ route }) => {
   const { expenseId } = route.params;
   const [expense, setExpense] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     const fetchExpense = async () => {
+      const userId = auth.currentUser?.uid; // Get the current user's ID
+
+      if (!userId) {
+        setError('User not authenticated.');
+        setLoading(false);
+        return;
+      }
+
       try {
         const expenseDoc = doc(db, 'expenses', expenseId);
         const expenseSnapshot = await getDoc(expenseDoc);
+
         if (expenseSnapshot.exists()) {
-          setExpense(expenseSnapshot.data());
+          const expenseData = expenseSnapshot.data();
+          // Check if the expense belongs to the current user
+          if (expenseData.userId === userId) {
+            setExpense(expenseData);
+          } else {
+            setError('Unauthorized access.');
+          }
+        } else {
+          setError('Expense not found.');
         }
       } catch (error) {
         console.error('Error fetching expense details: ', error);
+        setError('Error loading expense details.');
       } finally {
         setLoading(false);
       }
@@ -31,6 +50,14 @@ const ExpenseDetailScreen = ({ route }) => {
       <View style={styles.container}>
         <ActivityIndicator size="large" color="#0000ff" />
         <Text style={styles.loadingText}>Loading...</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.errorText}>{error}</Text>
       </View>
     );
   }
@@ -52,7 +79,7 @@ const ExpenseDetailScreen = ({ route }) => {
         <Text style={styles.title}>{expense.name}</Text>
         <Text style={styles.price}>${expense.price.toFixed(2)}</Text>
         <Text style={styles.date}>Date: {formattedDate}</Text>
-        <Text style={styles.location}>Location: {expense.location}</Text> 
+        <Text style={styles.location}>Location: {expense.location}</Text>
       </View>
     </View>
   );

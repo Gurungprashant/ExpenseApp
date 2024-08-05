@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, TextInput, StyleSheet, Text, TouchableOpacity, Platform, Alert } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { addDoc, collection } from 'firebase/firestore';
-import { db } from './firebase';
+import { db, auth } from './firebase';
 
 const AddExpenseScreen = ({ navigation }) => {
   const [name, setName] = useState(''); // Expense Name
@@ -13,6 +13,13 @@ const AddExpenseScreen = ({ navigation }) => {
   const [error, setError] = useState('');
 
   const handleAddExpense = async () => {
+    const userId = auth.currentUser?.uid; // Get the current user's ID
+
+    if (!userId) {
+      Alert.alert('Error', 'User not authenticated.');
+      return;
+    }
+
     if (name === '' || price === '' || !date || location === '') { // Ensure all fields are filled
       setError('Please fill in all fields');
       return;
@@ -24,6 +31,7 @@ const AddExpenseScreen = ({ navigation }) => {
         price: parseFloat(price),
         date,
         location, // Expense Location
+        userId, // Associate with user ID
       });
       Alert.alert('Success', 'Expense added successfully!', [
         { text: 'OK', onPress: () => {
@@ -60,9 +68,9 @@ const AddExpenseScreen = ({ navigation }) => {
       <Text style={styles.header}>Add New Expense</Text>
       
       <TextInput
-        placeholder="Expense Name" // Updated label
-        value={name} // Expense Name
-        onChangeText={setName} // Update state
+        placeholder="Expense Name"
+        value={name}
+        onChangeText={setName}
         style={styles.input}
       />
       <TextInput
@@ -73,9 +81,9 @@ const AddExpenseScreen = ({ navigation }) => {
         style={styles.input}
       />
       <TextInput
-        placeholder="Location" // New field for location
-        value={location} // Location
-        onChangeText={setLocation} // Update state
+        placeholder="Location"
+        value={location}
+        onChangeText={setLocation}
         style={styles.input}
       />
       

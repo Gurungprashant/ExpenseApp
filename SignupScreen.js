@@ -1,45 +1,58 @@
 import React, { useState } from 'react';
-import { View, TextInput, Text, StyleSheet, TouchableOpacity, TouchableHighlight, Alert } from 'react-native';
+import { View, TextInput, Button, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { auth } from './firebase';
+
+// Helper function to validate email format
+const isValidEmail = (email) => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+};
 
 const SignupScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
-  const handleSignup = async () => {
+  const handleSignUp = async () => {
+    setError(''); // Reset error message
+
     if (email === '' || password === '') {
       setError('Please fill in all fields');
       return;
     }
-  
+
+    if (!isValidEmail(email)) {
+      setError('Invalid email format');
+      return;
+    }
+
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters long');
+      return;
+    }
+
     try {
       await createUserWithEmailAndPassword(auth, email, password);
-      Alert.alert('Success', 'Account created successfully!', [
-        {
-          text: 'OK',
-          onPress: () => {
-            navigation.navigate('Login'); // Navigate to the Login screen
-            setEmail('');
-            setPassword('');
-          }
-        }
-      ]);
     } catch (error) {
-      setError(error.message);
+      if (error.code === 'auth/email-already-in-use') {
+        setError('Email already in use');
+      } else {
+        setError(error.message);
+      }
     }
   };
-  
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Create Account</Text>
+      <Text style={styles.title}>Sign Up</Text>
       <TextInput
         placeholder="Email"
         value={email}
         onChangeText={setEmail}
         style={styles.input}
         placeholderTextColor="#6c757d"
+        keyboardType="email-address"
       />
       <TextInput
         placeholder="Password"
@@ -49,9 +62,9 @@ const SignupScreen = ({ navigation }) => {
         style={styles.input}
         placeholderTextColor="#6c757d"
       />
-      <TouchableHighlight style={styles.button} onPress={handleSignup} underlayColor="#0056b3">
+      <TouchableOpacity style={styles.button} onPress={handleSignUp}>
         <Text style={styles.buttonText}>Sign Up</Text>
-      </TouchableHighlight>
+      </TouchableOpacity>
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <TouchableOpacity onPress={() => navigation.navigate('Login')}>
         <Text style={styles.link}>Already have an account? Login</Text>

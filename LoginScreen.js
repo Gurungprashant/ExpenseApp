@@ -1,7 +1,13 @@
 import React, { useState } from 'react';
-import { View, TextInput, Button, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, TextInput, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from './firebase';
+
+// Helper function to validate email format
+const isValidEmail = (email) => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+};
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
@@ -9,15 +15,37 @@ const LoginScreen = ({ navigation }) => {
   const [error, setError] = useState('');
 
   const handleLogin = async () => {
+    setError(''); // Reset error message
+
     if (email === '' || password === '') {
       setError('Please fill in all fields');
+      return;
+    }
+
+    if (!isValidEmail(email)) {
+      setError('Invalid email format');
       return;
     }
 
     try {
       await signInWithEmailAndPassword(auth, email, password);
     } catch (error) {
-      setError(error.message);
+      switch (error.code) {
+        case 'auth/user-not-found':
+          setError('Email not found');
+          break;
+        case 'auth/wrong-password':
+          setError('Incorrect password');
+          break;
+        case 'auth/invalid-email':
+          setError('Invalid email format');
+          break;
+        case 'auth/user-disabled':
+          setError('User account has been disabled');
+          break;
+        default:
+          setError('An error occurred. Please try again.');
+      }
     }
   };
 
@@ -30,6 +58,7 @@ const LoginScreen = ({ navigation }) => {
         onChangeText={setEmail}
         style={styles.input}
         placeholderTextColor="#6c757d"
+        keyboardType="email-address"
       />
       <TextInput
         placeholder="Password"

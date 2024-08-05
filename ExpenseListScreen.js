@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { collection, onSnapshot } from 'firebase/firestore';
-import { db } from './firebase';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { db, auth } from './firebase';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 // Helper function to format date to 'Month Year'
@@ -53,24 +53,31 @@ const ExpenseListScreen = ({ navigation }) => {
   const [expandedMonths, setExpandedMonths] = useState({});
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, 'expenses'), (snapshot) => {
-      const expenseList = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          name: data.name || '',
-          price: data.price || 0,
-          date: data.date ? data.date.toDate() : new Date(), // Convert Firestore Timestamp to Date
-        };
-      });
-      setExpenses(expenseList);
-      setLoading(false);
-    }, (error) => {
-      console.error('Error fetching expenses: ', error);
-      setLoading(false);
-    });
+    const userId = auth.currentUser?.uid; // Get the current user's ID
 
-    return () => unsubscribe();
+    if (userId) {
+      const expensesRef = collection(db, 'expenses');
+      const userExpensesQuery = query(expensesRef, where('userId', '==', userId));
+
+      const unsubscribe = onSnapshot(userExpensesQuery, (snapshot) => {
+        const expenseList = snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            name: data.name || '',
+            price: data.price || 0,
+            date: data.date ? data.date.toDate() : new Date(), // Convert Firestore Timestamp to Date
+          };
+        });
+        setExpenses(expenseList);
+        setLoading(false);
+      }, (error) => {
+        console.error('Error fetching expenses: ', error);
+        setLoading(false);
+      });
+
+      return () => unsubscribe();
+    }
   }, []);
 
   const groupedExpenses = groupExpensesByMonth(expenses);
@@ -81,6 +88,10 @@ const ExpenseListScreen = ({ navigation }) => {
       ...prev,
       [month]: !prev[month],
     }));
+  };
+
+  const handleAddExpense = () => {
+    navigation.navigate('Add Expense'); // Navigate to the AddExpense screen
   };
 
   if (loading) {
@@ -94,40 +105,49 @@ const ExpenseListScreen = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      <FlatList
-        data={sortedMonths}
-        keyExtractor={(item) => item}
-        renderItem={({ item: month }) => (
-          <View style={styles.monthContainer}>
-            <TouchableOpacity onPress={() => handleToggleMonth(month)} style={styles.monthHeader}>
-              <Text style={styles.monthTitle}>{month}</Text>
-              <Icon
-                name={expandedMonths[month] ? 'chevron-up' : 'chevron-down'}
-                size={24}
-                color="#007BFF"
-                style={styles.arrowIcon}
-              />
-            </TouchableOpacity>
-            {expandedMonths[month] && (
-              <View style={styles.expenseList}>
-                {groupedExpenses[month].map(expense => (
-                  <TouchableOpacity key={expense.id} onPress={() => navigation.navigate('ExpenseDetail', { expenseId: expense.id })}>
-                    <View style={styles.item}>
-                      <View style={styles.itemContent}>
-                        <Icon name="cash" size={30} color="#4CAF50" style={styles.itemIcon} />
-                        <View style={styles.itemText}>
-                          <Text style={styles.name}>{expense.name}</Text>
-                          <Text style={styles.price}>${expense.price.toFixed(2)}</Text>
+      {expenses.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyText}>No expenses found.</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={sortedMonths}
+          keyExtractor={(item) => item}
+          renderItem={({ item: month }) => (
+            <View style={styles.monthContainer}>
+              <TouchableOpacity onPress={() => handleToggleMonth(month)} style={styles.monthHeader}>
+                <Text style={styles.monthTitle}>{month}</Text>
+                <Icon
+                  name={expandedMonths[month] ? 'chevron-up' : 'chevron-down'}
+                  size={24}
+                  color="#007BFF"
+                  style={styles.arrowIcon}
+                />
+              </TouchableOpacity>
+              {expandedMonths[month] && (
+                <View style={styles.expenseList}>
+                  {groupedExpenses[month].map(expense => (
+                    <TouchableOpacity key={expense.id} onPress={() => navigation.navigate('ExpenseDetail', { expenseId: expense.id })}>
+                      <View style={styles.item}>
+                        <View style={styles.itemContent}>
+                          <Icon name="cash" size={30} color="#4CAF50" style={styles.itemIcon} />
+                          <View style={styles.itemText}>
+                            <Text style={styles.name}>{expense.name}</Text>
+                            <Text style={styles.price}>${expense.price.toFixed(2)}</Text>
+                          </View>
                         </View>
                       </View>
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-          </View>
-        )}
-      />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
+        />
+      )}
+      <TouchableOpacity style={styles.floatingButton} onPress={handleAddExpense}>
+        <Icon name="plus" size={24} color="#fff" />
+      </TouchableOpacity>
     </View>
   );
 };
@@ -141,6 +161,16 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 16,
     color: '#333',
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 18,
+    color: '#333',
+    marginBottom: 20,
   },
   monthContainer: {
     marginBottom: 16,
@@ -187,7 +217,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     flex: 1,
   },
-  name: { // Changed 'productName' to 'name'
+  name: {
     fontSize: 16,
     color: '#333',
   },
@@ -196,17 +226,16 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#4CAF50',
   },
-  addButton: {
+  floatingButton: {
+    position: 'absolute',
+    bottom: 16,
+    right: 16,
     backgroundColor: '#007BFF',
-    borderRadius: 8,
-    paddingVertical: 12,
-    marginVertical: 16,
+    borderRadius: 50,
+    padding: 16,
+    elevation: 5,
     alignItems: 'center',
-  },
-  addButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
+    justifyContent: 'center',
   },
 });
 

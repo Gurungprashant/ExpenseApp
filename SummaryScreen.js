@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
-import { collection, onSnapshot } from 'firebase/firestore';
-import { db } from './firebase';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { db, auth } from './firebase';
 
 const SummaryScreen = () => {
   const [summary, setSummary] = useState({
@@ -10,10 +10,25 @@ const SummaryScreen = () => {
     highestTransaction: { amount: 0, name: 'No transactions' },
     lowestTransaction: { amount: Infinity, name: 'No transactions' },
   });
+  const [loading, setLoading] = useState(true); // Loading state
+  const [error, setError] = useState(null); // Error state
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(
+    const userId = auth.currentUser?.uid;
+
+    if (!userId) {
+      setError('User not authenticated.');
+      setLoading(false);
+      return;
+    }
+
+    const expensesQuery = query(
       collection(db, 'expenses'),
+      where('userId', '==', userId) // Filter by user ID
+    );
+
+    const unsubscribe = onSnapshot(
+      expensesQuery,
       (snapshot) => {
         let totalAmount = 0;
         let highestTransaction = { amount: 0, name: 'No transactions' };
@@ -26,10 +41,10 @@ const SummaryScreen = () => {
           totalAmount += data.price;
 
           if (data.price > highestTransaction.amount) {
-            highestTransaction = { amount: data.price, name: data.name || 'Unnamed' }; // Updated to 'name'
+            highestTransaction = { amount: data.price, name: data.name || 'Unnamed' };
           }
           if (data.price < lowestTransaction.amount) {
-            lowestTransaction = { amount: data.price, name: data.name || 'Unnamed' }; // Updated to 'name'
+            lowestTransaction = { amount: data.price, name: data.name || 'Unnamed' };
           }
         });
 
@@ -39,15 +54,34 @@ const SummaryScreen = () => {
           highestTransaction,
           lowestTransaction,
         });
+        setLoading(false);
       },
       (error) => {
         console.error('Error fetching expenses: ', error);
+        setError('Error fetching expenses');
+        setLoading(false);
       }
     );
 
     // Cleanup subscription on unmount
     return () => unsubscribe();
   }, []);
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color="#007BFF" />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.error}>{error}</Text>
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={styles.container}>
@@ -124,6 +158,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333',
     fontWeight: 'bold',
+  },
+  error: {
+    color: '#f44336',
+    fontSize: 16,
+    textAlign: 'center',
+    marginTop: 20,
   },
 });
 
